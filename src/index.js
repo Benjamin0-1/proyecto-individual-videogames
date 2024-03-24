@@ -18,24 +18,24 @@ app.post('/associate-genres', async (req, res) => {
     try {
         const { videogameId, genreIds } = req.body;
 
-        // Check if the required parameters are provided
+        
         if (!videogameId || !genreIds || !Array.isArray(genreIds)) {
             return res.status(400).json({ error: 'Invalid parameters provided' });
         }
 
-        // Find the videogame by its ID
+     
         const videogame = await Videogame.findByPk(videogameId);
         if (!videogame) {
             return res.status(404).json({ error: 'Videogame not found' });
         }
 
-        // Find the genres by their IDs
+        
         const genres = await Genre.findAll({ where: { id: genreIds } });
         if (!genres || genres.length !== genreIds.length) {
             return res.status(404).json({ error: 'One or more genres not found' });
         }
 
-        // Associate the genres with the videogame
+       
         await videogame.addGenres(genres);
 
         res.status(200).json({ message: 'Genres associated with the videogame successfully' });
@@ -54,7 +54,7 @@ app.get('/videogames', async (req, res) => {
             const data = await response.json();
             res.json(data);
         } else {
-            res.status(404).send('No se encontraron videojuegos');
+            res.status(404).json('No se encontraron videojuegos');
         }
     } catch (error) {
         res.status(500).json('Internal Server Error')
@@ -82,7 +82,7 @@ app.get('/videogamesfromform', async(req, res) => {
                     image: game.image,
                     releaseDate: game.releaseDate,
                     rating: game.rating,
-                    Genres: formattedGenres // Include genre values directly
+                    Genres: formattedGenres 
                 };
             });
 
@@ -225,10 +225,11 @@ app.post('/videogames', async (req, res) => {
             }));
 
             const newGenres = await Genre.bulkCreate(genres); 
-            res.json({ message: `Genres created: ${newGenres.length}`, newGenres }); //simplify the structure by removing: message
+            res.json({ message: `Generos creados: ${newGenres.length}`, newGenres }); //simplify the structure by removing: message
         } else {
             const existingGenres = await Genre.findAll();
-            res.json(existingGenres) 
+            //res.json(existingGenres) 
+            res.json({message: `Ya has creado: ${existingGenres.length} generos`, existingGenres })
         }
     } catch (error) {
         res.status(500).json(`Internal Server Error: ${error}`);
@@ -266,7 +267,219 @@ app.post('/videogames', async (req, res) => {
     }
 });
 
+app.delete('/videogames/deletebyid/:id', async(req, res) => {
+    const id = req.params.id;
+    if (!id) {
+        return res.status(400).json({ message: 'Falta ID', missingId: true });
+    };
 
+    const regexId = /^\d+$/;
+    if (!regexId.test(id)) {
+        return res.status(400).json({ message: 'ID debe ser un numero', idIsNan: true });
+    }
+
+    try {
+        const gameToDelete = await Videogame.findOne({
+            where: {
+                id: id
+            }
+        });
+
+        if (!gameToDelete) {
+            return res.status(404).json({ notFoundMessage: `No hay videojuegos con ID: ${id}` });
+        }
+
+        await Videogame.destroy({
+            where: {
+                id: id
+            }
+        });
+
+        return res.json({ successMessage: `Videojuego con ID: ${id} eliminado con exito.` });
+    } catch (error) {
+        return res.status(500).json({ message: `Internal Server Error: ${error}` });
+    }
+});
+
+app.delete('/videogames/deletebyname/:name', async (req, res) => {
+    const name = req.params.name;
+    if (!name) {
+        return res.status(400).json({ message: 'Debe incluir un nombre', name: false });
+    }
+    try {
+        const deleteCount = await Videogame.destroy({
+            where: {
+                name: name
+            }
+        });
+
+        if (deleteCount === 0) {
+            return res.status(404).json({ notFoundMessage: `No se encontraron videojuegos con el Nombre: ${name}` });
+        }
+
+        return res.json({ successMessage: `Videojuego(s) con nombre: ${name} eliminado(s) con exito. Total eliminados: ${deleteCount}` });
+    } catch (error) {
+        return res.status(500).json({ error: `Internal Server Error: ${error.message}` });
+    }
+});
+
+app.delete('/videogames/deletebydate/:date', async(req, res) => {
+    const date = req.params.date;
+    if (!date) {
+        return res.status(400).json({message: 'Debe incluir una fecha.', dateProvided: false});
+    };
+    const regexDate = /^(?:\d{4}-\d{2}-\d{2})$/;
+    if (!regexDate.test(date)) {
+        return res.status(400).json({message: 'Fecha invalida, debe ser en format: YYYY-MM-DD', invalidDateFormat: true});
+    };
+
+    try {
+        const datesToDelete = await Videogame.findAll({
+            where: {
+                releaseDate: date 
+            }
+        });
+        if (datesToDelete.length === 0) {
+            return res.status(404).json({message: `No hay videojuegos con la Fecha: ${date} disponibles.`});
+        };
+
+        await Videogame.destroy({
+            where: {
+                releaseDate: date
+            }
+        });
+
+        return res.json({successMessage: `Se han eliminado un total de ${datesToDelete.length} videojuegos con la fecha: ${date}.`})
+    } catch (error) {
+        return res.status(500).json({message: `Internal Server Error: ${error.message}`});
+    }
+
+});
+
+app.delete('/videogames/deletebydaterange/:start/:end', async(req, res) => {
+    const start = req.params.start;
+    const end = req.params.end;
+    if (!start || !end) {
+        return res.status(400).json({ message: 'Faltan datos obligatorios.', failed: true });
+    };
+
+    const regexDate = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regexDate.test(start) || !regexDate.test(end)) {
+        return res.status(400).json({ message: 'Invalid date format. Date must be in YYYY-MM-DD format.' });
+    };
+
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid date range.' });
+    };
+
+    try {
+        const { count } = await Videogame.findAndCountAll({
+            where: {
+                releaseDate: {
+                    [Op.between]: [start, end]
+                }
+            }
+        });
+        if (count === 0) {
+            return res.status(404).json({ notFoundError: `No se encontraron videojuegos con las fechas entre: ${start} y ${end}` });
+        };
+
+        await Videogame.destroy({
+            where: {
+                releaseDate: {
+                    [Op.between]: [start, end]
+                }
+            }
+        });
+
+        return res.json({ successMessage: `Se han eliminado: ${count} videojuegos con las fechas ${start} y ${end} ` });
+
+    } catch (error) {
+        return res.status(500).json({ errorMessage: `Internal Server Error: ${error}` });
+    };
+});
+
+
+app.get('/videogames/searchbydate/:date', async (req, res) => {
+    const date = req.params.date;
+    
+   
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: 'Debe ingresar una fecha válida en formato: YYYY-MM-DD' });
+    }
+
+    try {
+        const { count } = await Videogame.findAndCountAll({
+            where: {
+                releaseDate: date
+            }
+        });
+
+        if (count === 0) {
+            return res.status(404).json({ notFoundMessage: `No se han encontrado videojuegos con la fecha: ${date}` });
+        }
+
+        const foundGames = await Videogame.findAll({
+            where: {
+                releaseDate: date
+            }
+        });
+        
+        res.json(foundGames);
+        //return res.json({successMessage: `Se han encontrado ${count} con la fecha ingresada: ${date}`, foundGames});
+
+
+    } catch (error) {
+        // Handle any internal server errors
+        return res.status(500).json({ errorMessage: `Internal Server Error: ${error}` });
+    }
+});
+
+app.get('/videogames/searchbydaterange/:start/:end', async (req, res) => {
+    const { start, end } = req.params;
+    
+    const regexDate = /^\d{4}-\d{2}-\d{2}$/;
+    if (!regexDate.test(start) || !regexDate.test(end) || !start || !end) {
+        return res.status(400).json({ message: 'Ambas fechas deben ser válidas en formato: YYYY-MM-DD' });
+    };
+
+    try {
+       
+        const foundGames = await Videogame.findAll({
+            where: {
+                releaseDate: {
+                    [Op.between]: [start, end] 
+                }
+            }
+        });
+
+        if (foundGames.length === 0) {
+            return res.status(404).json({ notFoundMessage: `No se encontraron videojuegos dentro del rango de fechas: ${start} - ${end}` });
+        }
+
+        res.json({successMessage: `${foundGames.length} Fechas encontradas entre: ${start} y ${end}: `, foundGames});
+    } catch (error) {
+        
+        return res.status(500).json({ errorMessage: `Internal Server Error: ${error.message}` });
+    }
+});
+
+app.get('/reverse/text', (req, res) => {
+    const text = req.query.text;
+    if(!text) {
+        res.status(400).json('faltan datos');
+         
+    };
+
+    const reversedText = text.split('').reverse().join('');
+
+
+
+    res.json(reversedText);
+
+});
 
 
   /*
@@ -283,7 +496,7 @@ app.get('/createvideogames', async (req, res) => {
         return {
           name: game.name,
           description: game.description,
-          platforms: game.platforms.map(platform => platform.platform.name).join(', '), //  platforms array
+          platforms: game.platforms.map(platform => platform.platform.name).join(', '),
           image: game.background_image,
           releaseDate: game.released,
           rating: game.rating,

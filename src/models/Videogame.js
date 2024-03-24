@@ -36,7 +36,7 @@ const Videogame = sequelize.define('Videogame', {
 });
 
 Videogame.associate = (models) => {
-    Videogame.belongsToMany(models.Genre, { through: 'VideogameGenre' }); // Include association options here
+    Videogame.belongsToMany(models.Genre, { through: 'VideogameGenre' }); 
 };
 
 module.exports = Videogame;
